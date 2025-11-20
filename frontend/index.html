@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hospital Management System</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f7f9fc; }
+        /* Custom scrollbar for better visual on tables */
+        .custom-scrollbar::-webkit-scrollbar { height: 8px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #e0e0e0; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #3b82f6; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #2563eb; }
+    </style>
+</head>
+<body class="min-h-screen antialiased">
+
+    <!-- Main Container -->
+    <div class="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
+        
+        <!-- Header -->
+        <header class="mb-8">
+            <h1 class="text-4xl font-extrabold text-gray-900 flex items-center">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-blue-600 mr-3" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z" />
+                    <path fill-rule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clip-rule="evenodd" />
+                </svg>
+                HMS Dashboard
+            </h1>
+            <p class="text-gray-500 mt-1">Hospital Management System Data Viewer (In-Memory Simulation)</p>
+        </header>
+
+        <!-- Navigation Tabs -->
+        <nav class="flex space-x-1 p-1 bg-white rounded-lg shadow-xl mb-8 border border-gray-100">
+            <button id="nav-patients" onclick="loadView('patients')" class="flex-1 py-3 px-4 text-sm font-medium text-center text-white bg-blue-600 rounded-lg shadow-md transition duration-150 hover:bg-blue-700">Patients</button>
+            <button id="nav-doctors" onclick="loadView('doctors')" class="flex-1 py-3 px-4 text-sm font-medium text-center text-gray-700 hover:text-blue-600 rounded-lg transition duration-150 hover:bg-gray-50">Doctors</button>
+            <button id="nav-appointments" onclick="loadView('appointments')" class="flex-1 py-3 px-4 text-sm font-medium text-center text-gray-700 hover:text-blue-600 rounded-lg transition duration-150 hover:bg-gray-50">Appointments</button>
+            <button id="nav-billing" onclick="loadView('billing')" class="flex-1 py-3 px-4 text-sm font-medium text-center text-gray-700 hover:text-blue-600 rounded-lg transition duration-150 hover:bg-gray-50">Billing</button>
+        </nav>
+
+        <!-- Main Content Area -->
+        <main id="app-content" class="bg-white p-6 rounded-xl shadow-2xl border border-gray-100"></main>
+    </div>
+
+    <!-- Message/Modal Container -->
+    <div id="message-box" class="fixed top-0 right-0 m-4 p-4 rounded-lg shadow-lg text-white font-semibold transition-opacity duration-300 opacity-0 z-50"></div>
+
+
+    <script>
+        // --- 1. DATA AND CONSTANTS (Pre-loaded from CSV files) ---
+
+        // Helper function to parse CSV string into an array of objects
+        function parseCSV(csvString) {
+            const lines = csvString.trim().split('\n').filter(line => line.trim() !== '');
+            if (lines.length === 0) return [];
+            
+            const [headerLine, ...dataLines] = lines;
+            const headers = headerLine.split(',').map(h => h.trim());
+            
+            return dataLines.map(line => {
+                const values = line.split(',');
+                const obj = {};
+                headers.forEach((header, i) => {
+                    const value = values[i] ? values[i].trim() : '';
+                    if (header.toLowerCase().includes('id') || header.toLowerCase() === 'age') {
+                        obj[header] = parseInt(value) || 0;
+                    } else if (header.toLowerCase() === 'amount') {
+                        obj[header] = parseFloat(value) || 0.0;
+                    } else {
+                        obj[header] = value;
+                    }
+                });
+                return obj;
+            });
+        }
+
+        // CSV DATA CONTENT (Completed from conversation history)
+        const appointmentsCSV = `
+id,patientId,doctorId,date,time
+1,1,1,2025-01-10,10:00
+2,2,3,2025-01-11,12:30
+3,3,2,2025-01-13,09:15
+4,4,9,2025-01-14,11:00
+5,5,5,2025-01-14,14:45
+6,6,8,2025-01-15,16:00
+7,7,6,2025-01-16,10:30
+8,8,4,2025-01-16,13:00
+9,9,7,2025-01-17,09:45
+10,10,1,2025-01-17,15:20
+11,11,12,2025-01-18,11:10
+12,12,10,2025-01-18,12:00
+13,13,6,2025-01-19,10:15
+14,14,3,2025-01-19,14:00
+15,15,11,2025-01-20,09:00
+16,16,2,2025-01-20,10:30
+17,17,5,2025-01-21,11:45
+18,18,9,2025-01-21,12:30
+19,19,8,2025-01-22,15:00
+20,20,4,2025-01-22,16:30
+21,21,1,2025-01-23,09:20
+22,22,3,2025-01-23,13:30
+23,23,9,2025-01-24,10:20
+24,24,7,2025-01-24,14:50
+25,25,2,2025-01-25,11:40
+26,26,5,2025-01-26,10:00
+27,27,14,2025-01-26,12:10
+28,28,17,2025-01-27,15:30
+29,29,10,2025-01-27,09:45
+30,30,11,2025-01-28,16:20
+31,31,13,2025-01-28,11:10
+32,32,20,2025-01-29,13:40
+33,33,15,2025-01-29,10:30
+34,34,16,2025-01-30,14:50
+35,35,21,2025-01-30,12:00
+36,36,22,2025-01-31,09:00
+37,37,18,2025-01-31,10:50
+38,38,24,2025-02-01,15:10
+39,39,25,2025-02-01,16:00
+40,40,19,2025-02-02,11:45
+41,41,23,2025-02-02,10:20
+42,42,6,2025-02-03,12:30
+43,43,4,2025-02-03,14:30
+44,44,8,2025-02-04,11:00
+45,45,9,2025-02-04,15:15
+46,46,1,2025-02-05,10:00
+47,47,3,2025-02-05,16:45
+48,48,12,2025-02-06,09:30
+49,49,14,2025-02-06,13:20
+50,50,2,2025-02-07,10:10
+51,5,24,2025-02-07,15:00
+52,16,7,2025-02-08,12:00
+53,21,10,2025-02-08,16:20
+54,32,5,2025-02-09,09:50
+55,44,18,2025-02-09,14:40
+56,13,15,2025-02-10,11:00
+57,8,19,2025-02-10,12:40
+58,27,22,2025-02-11,10:15
+59,40,17,2025-02-11,13:30
+60,12,11,2025-02-12,15:45
+`;
+
+        const billingCSV = `
+billId,appointmentId,doctorId,amount,description,date
+1,1,1,944,Consultation Fee (incl. GST 18%),2025-01-10
+2,2,3,826,Consultation Fee (incl. GST 18%),2025-01-11
+3,3,2,590,Consultation Fee (incl. GST 18%),2025-01-13
+4,4,9,472,Consultation Fee (incl. GST 18%),2025-01-14
+5,5,5,1062,Consultation Fee (incl. GST 18%),2025-01-14
+6,6,8,649,Consultation Fee (incl. GST 18%),2025-01-15
+7,7,6,708,Consultation Fee (incl. GST 18%),2025-01-16
+8,8,4,590,Consultation Fee (incl. GST 18%),2025-01-16
+9,9,7,531,Consultation Fee (incl. GST 18%),2025-01-17
+10,10,1,944,Consultation Fee (incl. GST 18%),2025-01-17
+11,11,12,826,Consultation Fee (incl. GST 18%),2025-01-18
+12,12,10,1003,Consultation Fee (incl. GST 18%),2025-01-18
+13,13,6,708,Consultation Fee (incl. GST 18%),2025-01-19
+14,14,3,826,Consultation Fee (incl. GST 18%),2025-01-19
+15,15,11,590,Consultation Fee (incl. GST 18%),2025-01-20
+16,16,2,590,Consultation Fee (incl. GST 18%),2025-01-20
+17,17,5,1062,Consultation Fee (incl. GST 18%),2025-01-21
+18,18,9,472,Consultation Fee (incl. GST 18%),2025-01-21
+19,19,8,649,Consultation Fee (incl. GST 18%),2025-01-22
+20,20,4,590,Consultation Fee (incl. GST 18%),2025-01-22
+`;
+        
+        const doctorsCSV = `
+id,name,specialty,contact
+1,Dr. Bob Smith,Cardiology,9876501234
+2,Dr. Meera Gupta,Dermatology,9988123456
+3,Dr. Arjun Iyer,Orthopedics,9765432109
+4,Dr. Kavita Menon,Pediatrics,9123456709
+5,Dr. Raghav Rao,Neurology,9876543321
+6,Dr. Nisha Chawla,Gynecology,9823456781
+7,Dr. Aakash Patel,ENT,9934567812
+8,Dr. Sanya D'Souza,Ophthalmology,9812345600
+9,Dr. Harish Kumar,General Medicine,9887766554
+10,Dr. Leena Khurana,Oncology,9786543210
+11,Dr. Ajay Nair,Physiotherapy,9001122334
+12,Dr. Shalini Mishra,Endocrinology,9911223344
+13,Dr. Kabir Oberoi,Cardiology,9101234567
+14,Dr. Priyanka Rao,Nephrology,9123405678
+15,Dr. Veer Sethi,Gastroenterology,9810098765
+16,Dr. Farah Siddiqui,Pulmonology,9301125674
+17,Dr. Rajat Kapoor,Urology,9321098765
+18,Dr. Manisha Sen,Rheumatology,9123001122
+19,Dr. Viren Shah,Orthopedics,9832109898
+20,Dr. Ritu Sarin,Neurology,9134001122
+21,Dr. Aditya Narang,General Surgery,9988774411
+22,Dr. Tejal Chopra,ENT,9872309876
+23,Dr. Zainab Ali,Ophthalmology,9988001122
+24,Dr. Kunal Mathur,Cardiology,9122334455
+25,Dr. Riya Fernandes,Psychiatry,9788899001
+`;
+
+        const patientsCSV = `
+id,name,age,gender,contact
+1,Alice Johnson,30,F,9876543210
+2,Rahul Sharma,45,M,9123456789
+3,Sneha Patil,27,F,9988776655
+4,Aarav Mehta,22,M,9876543201
+5,Kavya Nair,51,F,9765432198
+6,Dev Malhotra,34,M,9856321470
+7,Isha Singh,29,F,9098765432
+8,Manav Kapoor,40,M,9123987456
+9,Ananya Gupta,19,F,9812345678
+10,Vedant Kulkarni,33,M,9876098765
+11,Tanvi Reddy,26,F,9543217890
+12,Rohan Desai,38,M,9123409876
+13,Priya Iyer,47,F,9638527410
+14,Arjun Verma,55,M,9087654321
+15,Ritika Soni,31,F,9874501236
+16,Yash Khanna,28,M,9988123001
+17,Neha Trivedi,36,F,9876541200
+18,Karan Bansal,52,M,9123009876
+19,Aditi Jha,23,F,9012345671
+20,Samar Chawla,44,M,9765432187
+21,Maya D’Souza,32,F,9001122334
+22,Samarth Jain,39,M,9811223344
+23,Harini Menon,58,F,9734567890
+24,Krish Vora,21,M,9877701234
+25,Nidhi Mehra,42,F,9123401122
+26,Advik Rao,18,M,9011123344
+27,Shreya Kohli,49,F,9823456711
+28,Atharv Kulkarni,35,M,9786512345
+29,Sana Qureshi,24,F,9088123456
+30,Reyansh Bhatia,29,M,9812341199
+31,Diya Shah,41,F,9009988776
+32,Ibrahim Khan,33,M,9871122330
+33,Meera Saxena,46,F,9954321001
+34,Naman Shetty,50,M,9456123780
+35,Vaishnavi Jadhav,20,F,9321789056
+36,Ayush Pandey,37,M,9345127890
+37,Shagun Roy,27,F,9856432109
+38,Parth Agrawal,31,M,9988776600
+39,Simran Kaur,22,F,9123450099
+40,Omkar Joshi,48,M,9832107654
+41,Rhea Malhotra,26,F,9786541122
+42,Arnav Saha,34,M,9012783645
+43,Lavanya Pillai,53,F,9021346789
+44,Sahil Chopra,30,M,9122076543
+45,Anika Paul,25,F,9988123099
+46,Ishan Mathur,29,M,9123098876
+47,Shanaya Kapoor,43,F,9011239988
+48,Tejas Nair,36,M,9877601235
+49,Muskan Hussain,28,F,9076543219
+50,Yuvraj Singh,52,M,9023405677
+`;
+
+        let appData = {};
+        
+        // --- 2. CORE APPLICATION LOGIC (SIMULATED HOSPITAL CLASS) ---
+
+        /**
+         * Initializes the in-memory data store from CSV strings.
+         */
+        function initApp() {
+            appData.patients = parseCSV(patientsCSV);
+            appData.doctors = parseCSV(doctorsCSV);
+            appData.appointments = parseCSV(appointmentsCSV);
+            appData.billing = parseCSV(billingCSV);
+
+            // Calculate next IDs (C++ Hospital class emulation)
+            appData.nextPatientId = Math.max(...appData.patients.map(p => p.id), 0) + 1;
+            appData.nextDoctorId = Math.max(...appData.doctors.map(d => d.id), 0) + 1;
+            appData.nextAppointmentId = Math.max(...appData.appointments.map(a => a.id), 0) + 1;
+            appData.nextBillId = Math.max(...appData.billing.map(b => b.billId), 0) + 1;
+
+            // Load the default view
+            loadView('patients');
+        }
+
+        /**
+         * Finds a patient object by ID.
+         * @param {number} id 
+         * @returns {object|undefined}
+         */
+        function getPatient(id) {
+            return appData.patients.find(p => p.id === id);
+        }
+
+        /**
+         * Finds a doctor object by ID.
+         * @param {number} id 
+         * @returns {object|undefined}
+         */
+        function getDoctor(id) {
+            return appData.doctors.find(d => d.id === id);
+        }
+        
+        // --- 3. UI HELPERS ---
+
+        /**
+         * Displays a temporary success or error message.
+         * @param {string} message 
+         * @param {string} type 'success' or 'error'
+         */
+        function showMessage(message, type = 'success') {
+            const box = document.getElementById('message-box');
+            box.textContent = message;
+            box.className = 'fixed top-0 right-0 m-4 p-4 rounded-lg shadow-lg text-white font-semibold transition-opacity duration-300 opacity-100 z-50';
+            
+            if (type === 'success') {
+                box.classList.add('bg-green-500');
+            } else {
+                box.classList.add('bg-red-500');
+            }
+
+            setTimeout(() => {
+                box.classList.remove('opacity-100');
+                box.classList.add('opacity-0');
+            }, 3000);
+        }
+        
+        /**
+         * Updates navigation buttons state.
+         * @param {string} activeView 
+         */
+        function updateNav(activeView) {
+            document.querySelectorAll('nav button').forEach(button => {
+                if (button.id === `nav-${activeView}`) {
+                    button.className = 'flex-1 py-3 px-4 text-sm font-medium text-center text-white bg-blue-600 rounded-lg shadow-md transition duration-150 hover:bg-blue-700';
+                } else {
+                    button.className = 'flex-1 py-3 px-4 text-sm font-medium text-center text-gray-700 hover:text-blue-600 rounded-lg transition duration-150 hover:bg-gray-50';
+                }
+            });
+        }
+        
+        /**
+         * The main function to switch content views.
+         * @param {string} viewName 
+         */
+        function loadView(viewName) {
+            const content = document.getElementById('app-content');
+            updateNav(viewName);
+
+            switch (viewName) {
+                case 'patients':
+                    content.innerHTML = renderPatientsView();
+                    document.getElementById('add-patient-form').onsubmit = handleAddPatient;
+                    break;
+                case 'doctors':
+                    content.innerHTML = renderDoctorsView();
+                    document.getElementById('add-doctor-form').onsubmit = handleAddDoctor;
+                    break;
+                case 'appointments':
+                    content.innerHTML = renderAppointmentsView();
+                    document.getElementById('add-appointment-form').onsubmit = handleAddAppointment;
+                    break;
+                case 'billing':
+                    content.innerHTML = renderBillingView();
+                    break;
+            }
+        }
+
+        // --- 4. RENDER FUNCTIONS ---
+
+        function createTableHTML(data, headers, title, keyField, linkData = {}) {
+            if (data.length === 0) return `<p class="text-gray-500">No ${title.toLowerCase()} records found.</p>`;
+            
+            const headerRow = headers.map(h => `<th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">${h}</th>`).join('');
+            
+            const bodyRows = data.map(item => {
+                let row = headers.map(header => {
+                    let displayValue = item[keyField[header]] !== undefined ? item[keyField[header]] : '';
+
+                    // Apply linkData transformation for foreign keys/lookups
+                    if (linkData[header]) {
+                        const link = linkData[header];
+                        const linkedItem = link.finder(item[link.fk]);
+                        displayValue = linkedItem ? linkedItem[link.displayField] : 'N/A';
+                        if (link.subDisplayField) {
+                            displayValue += ` (${linkedItem[link.subDisplayField]})`;
+                        }
+                    } else if (header === 'Amount') {
+                        displayValue = '₹' + displayValue.toFixed(2); // Format currency
+                    }
+
+                    return `<td class="px-4 py-2 whitespace-nowrap text-sm text-gray-800">${displayValue}</td>`;
+                }).join('');
+                return `<tr class="border-t border-gray-100 hover:bg-blue-50/50">${row}</tr>`;
+            }).join('');
+
+            return `
+                <div class="overflow-x-auto custom-scrollbar">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>${headerRow}</tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-100">
+                            ${bodyRows}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        }
+
+        // --- Patients View ---
+        function renderPatientsView() {
+            const headers = ['ID', 'Name', 'Age', 'Gender', 'Contact'];
+            const keyField = { ID: 'id', Name: 'name', Age: 'age', Gender: 'gender', Contact: 'contact' };
+            const tableHtml = createTableHTML(appData.patients, headers, 'Patients', keyField);
+
+            return `
+                <div class="flex justify-between items-center mb-6 border-b pb-4">
+                    <h2 class="text-2xl font-bold text-gray-800">Patients (${appData.patients.length})</h2>
+                    <button onclick="document.getElementById('add-patient-modal').classList.remove('hidden')"
+                        class="bg-green-500 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-green-600 transition duration-150 flex items-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clip-rule="evenodd" /></svg>
+                        Add Patient
+                    </button>
+                </div>
+                ${tableHtml}
+                ${addPatientModal()}
+            `;
+        }
+        
+        function handleAddPatient(event) {
+            event.preventDefault();
+            const form = event.target;
+            const name = form.name.value.trim();
+            const age = parseInt(form.age.value);
+            const gender = form.gender.value.trim();
+            const contact = form.contact.value.trim();
+
+            if (!name || isNaN(age) || age <= 0 || !gender || !contact) {
+                return showMessage('Please fill all patient fields correctly.', 'error');
+            }
+
+            const newPatient = {
+                id: appData.nextPatientId++,
+                name,
+                age,
+                gender,
+                contact
+            };
+            appData.patients.push(newPatient);
+            
+            showMessage(`Patient ${newPatient.name} (ID: ${newPatient.id}) added successfully.`);
+            document.getElementById('add-patient-modal').classList.add('hidden');
+            loadView('patients'); // Re-render the view
+        }
+
+        function addPatientModal() {
+            return `
+                <div id="add-patient-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-75 z-50 flex justify-center items-center p-4">
+                    <div class="bg-white p-8 rounded-xl shadow-2xl max-w-lg w-full">
+                        <h3 class="text-xl font-bold mb-6 text-gray-800 border-b pb-2">Add New Patient</h3>
+                        <form id="add-patient-form">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <label class="block">
+                                    <span class="text-gray-700">Name</span>
+                                    <input type="text" name="name" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border focus:border-blue-500 focus:ring-blue-500">
+                                </label>
+                                <label class="block">
+                                    <span class="text-gray-700">Age</span>
+                                    <input type="number" name="age" required min="1" max="120" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border focus:border-blue-500 focus:ring-blue-500">
+                                </label>
+                                <label class="block">
+                                    <span class="text-gray-700">Gender</span>
+                                    <select name="gender" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border bg-white focus:border-blue-500 focus:ring-blue-500">
+                                        <option value="">Select Gender</option>
+                                        <option value="M">Male</option>
+                                        <option value="F">Female</option>
+                                        <option value="O">Other</option>
+                                    </select>
+                                </label>
+                                <label class="block">
+                                    <span class="text-gray-700">Contact</span>
+                                    <input type="tel" name="contact" required pattern="[0-9]{10,}" title="Contact number must be at least 10 digits" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border focus:border-blue-500 focus:ring-blue-500">
+                                </label>
+                            </div>
+                            <div class="mt-6 flex justify-end space-x-3">
+                                <button type="button" onclick="document.getElementById('add-patient-modal').classList.add('hidden')"
+                                    class="py-2 px-4 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition duration-150">Cancel</button>
+                                <button type="submit" class="bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-blue-700 transition duration-150">Save Patient</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            `;
+        }
+
+        // --- Doctors View ---
+        function renderDoctorsView() {
+            const headers = ['ID', 'Name', 'Specialty', 'Contact'];
+            const keyField = { ID: 'id', Name: 'name', Specialty: 'specialty', Contact: 'contact' };
+            const tableHtml = createTableHTML(appData.doctors, headers, 'Doctors', keyField);
+
+            return `
+                <div class="flex justify-between items-center mb-6 border-b pb-4">
+                    <h2 class="text-2xl font-bold text-gray-800">Doctors (${appData.doctors.length})</h2>
+                    <button onclick="document.getElementById('add-doctor-modal').classList.remove('hidden')"
+                        class="bg-green-500 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-green-600 transition duration-150 flex items-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clip-rule="evenodd" /></svg>
+                        Add Doctor
+                    </button>
+                </div>
+                ${tableHtml}
+                ${addDoctorModal()}
+            `;
+        }
+
+        function handleAddDoctor(event) {
+            event.preventDefault();
+            const form = event.target;
+            const name = form.name.value.trim();
+            const specialty = form.specialty.value.trim();
+            const contact = form.contact.value.trim();
+
+            if (!name || !specialty || !contact) {
+                return showMessage('Please fill all doctor fields.', 'error');
+            }
+
+            const newDoctor = {
+                id: appData.nextDoctorId++,
+                name,
+                specialty,
+                contact
+            };
+            appData.doctors.push(newDoctor);
+            
+            showMessage(`Doctor ${newDoctor.name} (${newDoctor.specialty}) added successfully.`);
+            document.getElementById('add-doctor-modal').classList.add('hidden');
+            loadView('doctors'); // Re-render the view
+        }
+
+        function addDoctorModal() {
+            return `
+                <div id="add-doctor-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-75 z-50 flex justify-center items-center p-4">
+                    <div class="bg-white p-8 rounded-xl shadow-2xl max-w-lg w-full">
+                        <h3 class="text-xl font-bold mb-6 text-gray-800 border-b pb-2">Add New Doctor</h3>
+                        <form id="add-doctor-form">
+                            <label class="block mb-4">
+                                <span class="text-gray-700">Name</span>
+                                <input type="text" name="name" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border focus:border-blue-500 focus:ring-blue-500">
+                            </label>
+                            <label class="block mb-4">
+                                <span class="text-gray-700">Specialty</span>
+                                <input type="text" name="specialty" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border focus:border-blue-500 focus:ring-blue-500">
+                            </label>
+                            <label class="block mb-4">
+                                <span class="text-gray-700">Contact</span>
+                                <input type="tel" name="contact" required pattern="[0-9]{10,}" title="Contact number must be at least 10 digits" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border focus:border-blue-500 focus:ring-blue-500">
+                            </label>
+                            <div class="mt-6 flex justify-end space-x-3">
+                                <button type="button" onclick="document.getElementById('add-doctor-modal').classList.add('hidden')"
+                                    class="py-2 px-4 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition duration-150">Cancel</button>
+                                <button type="submit" class="bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-blue-700 transition duration-150">Save Doctor</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            `;
+        }
+
+
+        // --- Appointments View ---
+        function renderAppointmentsView() {
+            const headers = ['ID', 'Patient', 'Doctor', 'Date', 'Time'];
+            const keyField = { ID: 'id', Patient: 'patientId', Doctor: 'doctorId', Date: 'date', Time: 'time' };
+            const linkData = {
+                Patient: { fk: 'patientId', finder: getPatient, displayField: 'name' },
+                Doctor: { fk: 'doctorId', finder: getDoctor, displayField: 'name', subDisplayField: 'specialty' }
+            };
+            const tableHtml = createTableHTML(appData.appointments, headers, 'Appointments', keyField, linkData);
+
+            return `
+                <div class="flex justify-between items-center mb-6 border-b pb-4">
+                    <h2 class="text-2xl font-bold text-gray-800">Appointments (${appData.appointments.length})</h2>
+                    <button onclick="document.getElementById('add-appointment-modal').classList.remove('hidden')"
+                        class="bg-green-500 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-green-600 transition duration-150 flex items-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clip-rule="evenodd" /></svg>
+                        Book Appointment
+                    </button>
+                </div>
+                ${tableHtml}
+                ${addAppointmentModal()}
+            `;
+        }
+
+        function handleAddAppointment(event) {
+            event.preventDefault();
+            const form = event.target;
+            const patientId = parseInt(form.patientId.value);
+            const doctorId = parseInt(form.doctorId.value);
+            const date = form.date.value;
+            const time = form.time.value;
+
+            if (isNaN(patientId) || isNaN(doctorId) || !date || !time) {
+                return showMessage('Please fill all appointment fields correctly.', 'error');
+            }
+
+            if (!getPatient(patientId)) {
+                return showMessage(`Patient ID ${patientId} not found.`, 'error');
+            }
+            if (!getDoctor(doctorId)) {
+                return showMessage(`Doctor ID ${doctorId} not found.`, 'error');
+            }
+
+            const newAppointment = {
+                id: appData.nextAppointmentId++,
+                patientId,
+                doctorId,
+                date,
+                time
+            };
+            appData.appointments.push(newAppointment);
+            
+            showMessage(`Appointment booked (ID: ${newAppointment.id}) on ${date} at ${time}.`);
+            document.getElementById('add-appointment-modal').classList.add('hidden');
+            loadView('appointments'); // Re-render the view
+        }
+
+        function addAppointmentModal() {
+            const patientOptions = appData.patients.map(p => `<option value="${p.id}">${p.id} - ${p.name}</option>`).join('');
+            const doctorOptions = appData.doctors.map(d => `<option value="${d.id}">${d.id} - ${d.name} (${d.specialty})</option>`).join('');
+
+            return `
+                <div id="add-appointment-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-75 z-50 flex justify-center items-center p-4">
+                    <div class="bg-white p-8 rounded-xl shadow-2xl max-w-lg w-full">
+                        <h3 class="text-xl font-bold mb-6 text-gray-800 border-b pb-2">Book New Appointment</h3>
+                        <form id="add-appointment-form">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <label class="block">
+                                    <span class="text-gray-700">Patient (ID - Name)</span>
+                                    <select name="patientId" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border bg-white focus:border-blue-500 focus:ring-blue-500">
+                                        <option value="">Select Patient</option>
+                                        ${patientOptions}
+                                    </select>
+                                </label>
+                                <label class="block">
+                                    <span class="text-gray-700">Doctor (ID - Name)</span>
+                                    <select name="doctorId" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border bg-white focus:border-blue-500 focus:ring-blue-500">
+                                        <option value="">Select Doctor</option>
+                                        ${doctorOptions}
+                                    </select>
+                                </label>
+                                <label class="block">
+                                    <span class="text-gray-700">Date</span>
+                                    <input type="date" name="date" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border focus:border-blue-500 focus:ring-blue-500">
+                                </label>
+                                <label class="block">
+                                    <span class="text-gray-700">Time</span>
+                                    <input type="time" name="time" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border focus:border-blue-500 focus:ring-blue-500">
+                                </label>
+                            </div>
+                            <div class="mt-6 flex justify-end space-x-3">
+                                <button type="button" onclick="document.getElementById('add-appointment-modal').classList.add('hidden')"
+                                    class="py-2 px-4 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition duration-150">Cancel</button>
+                                <button type="submit" class="bg-blue-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-blue-700 transition duration-150">Book</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            `;
+        }
+
+        // --- Billing View ---
+        function renderBillingView() {
+            const headers = ['Bill ID', 'Appointment ID', 'Doctor', 'Amount', 'Description', 'Date'];
+            const keyField = { 
+                'Bill ID': 'billId', 
+                'Appointment ID': 'appointmentId', 
+                'Doctor': 'doctorId', 
+                'Amount': 'amount', 
+                'Description': 'description', 
+                'Date': 'date' 
+            };
+            const linkData = {
+                Doctor: { fk: 'doctorId', finder: getDoctor, displayField: 'name' }
+            };
+
+            // NOTE: The C++ Hospital class has a generateBill(int appointmentId) method.
+            // In this simulation, we only display the existing bills for simplicity.
+            const tableHtml = createTableHTML(appData.billing, headers, 'Billing', keyField, linkData);
+
+            return `
+                <div class="flex justify-between items-center mb-6 border-b pb-4">
+                    <h2 class="text-2xl font-bold text-gray-800">Billing Records (${appData.billing.length})</h2>
+                    <button onclick="showMessage('This action is simulated: Bill ID ${appData.nextBillId++} generated and added to table.', 'success'); loadView('billing');"
+                        class="bg-green-500 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-green-600 transition duration-150 flex items-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor"><path d="M10 2a1 1 0 011 1v1h2a1 1 0 110 2h-2v2a1 1 0 11-2 0V6H7a1 1 0 110-2h2V3a1 1 0 011-1zM4 9a1 1 0 011-1h10a1 1 0 011 1v7a1 1 0 01-1 1H5a1 1 0 01-1-1V9zm1 1v6h10v-6H5z" clip-rule="evenodd" /></svg>
+                        Simulate Generate Bill
+                    </button>
+                </div>
+                ${tableHtml}
+                <p class="mt-4 text-sm text-gray-500">Note: The "Simulate Generate Bill" button mimics the C++ \`generateBill()\` function by simply incrementing a simulated Bill ID for demonstration.</p>
+            `;
+        }
+
+        // --- 5. INITIALIZATION ---
+        window.onload = initApp;
+
+    </script>
+</body>
+</html>
